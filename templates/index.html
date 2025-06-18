@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERP Dashboard - Construction Materials</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .main-content {
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .page {
+            display: none;
+        }
+        .page.active {
+            display: block;
+        }
+        .metric-card {
+            transition: all 0.3s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .nav-link {
+            transition: all 0.2s ease;
+        }
+        .nav-link:hover {
+            background-color: #f3f4f6;
+        }
+        .nav-link.active {
+            background-color: #e5e7eb;
+            border-left: 3px solid #3b82f6;
+        }
+        .sync-indicator {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: white;
+            border-radius: 0.5rem;
+            width: 100%;
+            max-width: 32rem;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .product-row {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex h-screen">
+    <!-- Sidebar -->
+    <div class="sidebar w-64 bg-white border-r border-gray-200 flex flex-col">
+        <!-- Logo -->
+        <div class="p-4 border-b border-gray-200">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-warehouse text-white"></i>
+                </div>
+                <span class="text-xl font-bold text-gray-800">Construction ERP</span>
+            </div>
+        </div>
+
+        <!-- User Info -->
+        <div class="p-4 border-b border-gray-200 flex items-center space-x-3">
+            <div class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                <i class="fas fa-user text-gray-600"></i>
+            </div>
+            <div>
+                <div class="font-medium" id="username-display">Loading...</div>
+                <div class="text-xs text-gray-500" id="role-display">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="flex-1 overflow-y-auto">
+            <nav class="p-2">
+                <a href="#" data-page="dashboard" class="nav-link active block px-3 py-2 rounded mb-1 text-gray-700 font-medium">
+                    <i class="fas fa-home mr-2"></i>Dashboard
+                </a>
+                <a href="#" data-page="inventory" class="nav-link block px-3 py-2 rounded mb-1 text-gray-700 font-medium">
+                    <i class="fas fa-boxes mr-2"></i>Inventory
+                </a>
+                <a href="#" data-page="transfers" class="nav-link block px-3 py-2 rounded mb-1 text-gray-700 font-medium">
+                    <i class="fas fa-exchange-alt mr-2"></i>Transfers
+                </a>
+                <a href="#" data-page="sales" class="nav-link block px-3 py-2 rounded mb-1 text-gray-700 font-medium">
+                    <i class="fas fa-shopping-cart mr-2"></i>Sales
+                </a>
+                <a href="#" data-page="reports" class="nav-link block px-3 py-2 rounded mb-1 text-gray-700 font-medium">
+                    <i class="fas fa-chart-line mr-2"></i>Reports
+                </a>
+            </nav>
+        </div>
+
+        <!-- Sync Status -->
+        <div class="p-4 border-t border-gray-200">
+            <div class="flex items-center justify-between text-sm">
+                <div class="flex items-center">
+                    <div class="sync-indicator w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    <span id="sync-status">Online</span>
+                </div>
+                <button id="force-sync" class="text-blue-600 hover:text-blue-800">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content flex-1 flex flex-col">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 p-4">
+            <div class="flex justify-between items-center">
+                <h1 class="text-xl font-bold text-gray-800" id="dashboard-title">Dashboard</h1>
+                <div class="flex items-center space-x-4">
+                    <button id="logout-btn" class="text-gray-600 hover:text-gray-800">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Content -->
+        <div class="flex-1 p-6 overflow-y-auto">
+            <!-- Dashboard Page -->
+            <div id="dashboard-page" class="page active">
+                <!-- Quick Actions -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <button id="add-inventory-btn" class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center justify-center space-x-2 hover:bg-gray-50">
+                        <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-plus text-blue-600"></i>
+                        </div>
+                        <span class="font-medium">Add Inventory</span>
+                    </button>
+                    <button id="transfer-btn" class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center justify-center space-x-2 hover:bg-gray-50">
+                        <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-exchange-alt text-green-600"></i>
+                        </div>
+                        <span class="font-medium">Transfer Items</span>
+                    </button>
+                    <button id="new-sale-btn" class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex items-center justify-center space-x-2 hover:bg-gray-50">
+                        <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-shopping-cart text-purple-600"></i>
+                        </div>
+                        <span class="font-medium">New Sale</span>
+                    </button>
+                </div>
+
+                <!-- Stats Overview -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <div class="text-gray-500 text-sm mb-1">Total Inventory</div>
+                        <div class="text-2xl font-bold text-blue-600" id="total-inventory">0</div>
+                        <div class="text-xs text-gray-500 mt-1">Loading...</div>
+                    </div>
+                    <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <div class="text-gray-500 text-sm mb-1">Warehouse Stock</div>
+                        <div class="text-2xl font-bold text-green-600" id="warehouse-stock">0</div>
+                        <div class="text-xs text-gray-500 mt-1">Loading...</div>
+                    </div>
+                    <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <div class="text-gray-500 text-sm mb-1">Showroom Stock</div>
+                        <div class="text-2xl font-bold text-purple-600" id="showroom-stock">0</div>
+                        <div class="text-xs text-gray-500 mt-1">Loading...</div>
+                    </div>
+                    <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <div class="text-gray-500 text-sm mb-1">Pending Transfers</div>
+                        <div class="text-2xl font-bold text-yellow-600" id="pending-transfers">0</div>
+                        <div class="text-xs text-gray-500 mt-1">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-medium text-gray-800">Inventory Movement</h3>
+                            <select id="inventory-period" class="text-xs border border-gray-200 rounded px-2 py-1 bg-gray-50">
+                                <option value="7">Last 7 days</option>
+                                <option value="30">Last 30 days</option>
+                                <option value="90">Last 90 days</option>
+                            </select>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="inventoryChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-medium text-gray-800">Sales Performance</h3>
+                            <select id="sales-period" class="text-xs border border-gray-200 rounded px-2 py-1 bg-gray-50">
+                                <option value="7">Last 7 days</option>
+                                <option value="30">Last 30 days</option>
+                                <option value="90">Last 90 days</option>
+                            </select>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="salesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-medium text-gray-800">Recent Activity</h3>
+                        <button class="text-xs text-blue-600 hover:text-blue-800">View All</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="text-left text-xs text-gray-500 uppercase border-b border-gray-200">
+                                    <th class="pb-2">Time</th>
+                                    <th class="pb-2">Action</th>
+                                    <th class="pb-2">Product</th>
+                                    <th class="pb-2">Quantity</th>
+                                    <th class="pb-2">Location</th>
+                                    <th class="pb-2">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activity-table">
+                                <!-- Will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory Page -->
+            <div id="inventory-page" class="page">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-gray-800">Inventory Management</h2>
+                    <button id="add-inventory-btn-inv" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        <i class="fas fa-plus mr-2"></i>Add Inventory
+                    </button>
+                </div>
+
+                <div class="mb-4 flex space-x-4">
+                    <div class="flex-1">
+                        <label class="block text-gray-700 text-sm font-medium mb-2">Filter by Location</label>
+                        <select id="inventory-filter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="all">All Locations</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="showroom">Showroom</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-gray-700 text-sm font-medium mb-2">Search Products</label>
+                        <input type="text" id="inventory-search" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Search by product name or brand">
+                    </div>
+                </div>
+
+                <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="text-left text-xs text-gray-500 uppercase border-b border-gray-200">
+                                    <th class="pb-2">Product ID</th>
+                                    <th class="pb-2">Product Name</th>
+                                    <th class="pb-2">Brand</th>
+                                    <th class="pb-2">Location</th>
+                                    <th class="pb-2">Quantity</th>
+                                    <th class="pb-2">Last Updated</th>
+                                    <th class="pb-2">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventory-table">
+                                <!-- Will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transfers Page -->
+            <div id="transfers-page" class="page">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-gray-800">Transfer Management</h2>
+                    <button id="transfer-btn-trans" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                        <i class="fas fa-exchange-alt mr-2"></i>New Transfer
+                    </button>
+                </div>
+
+                <div class="mb-4 flex space-x-4">
+                    <div class="flex-1">
+                        <label class="block text-gray-700 text-sm font-medium mb-2">Filter by Status</label>
+                        <select id="transfer-filter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="all">All Statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="text-left text-xs text-gray-500 uppercase border-b border-gray-200">
+                                    <th class="pb-2">Transfer ID</th>
+                                    <th class="pb-2">Product</th>
+                                    <th class="pb-2">From</th>
+                                    <th class="pb-2">To</th>
+                                    <th class="pb-2">Quantity</th>
+                                    <th class="pb-2">Status</th>
+                                    <th class="pb-2">Initiated By</th>
+                                    <th class="pb-2">Date</th>
+                                    <th class="pb-2">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transfers-table">
+                                <!-- Will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sales Page -->
+            <div id="sales-page" class="page">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-gray-800">Sales Management</h2>
+                    <button id="new-sale-btn-sales" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                        <i class="fas fa-shopping-cart mr-2"></i>New Sale
+                    </button>
+                </div>
+
+                <div class="mb-4 flex space-x-4">
+                    <div class="flex-1">
+                        <label class="block text-gray-700 text-sm font-medium mb-2">Filter by Location</label>
+                        <select id="sales-filter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="all">All Locations</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="showroom">Showroom</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-gray-700 text-sm font-medium mb-2">Search</label>
+                        <input type="text" id="sales-search" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Search by customer or product">
+                    </div>
+                </div>
+
+                <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="text-left text-xs text-gray-500 uppercase border-b border-gray-200">
+                                    <th class="pb-2">Sale ID</th>
+                                    <th class="pb-2">Customer</th>
+                                    <th class="pb-2">Location</th>
+                                    <th class="pb-2">Products</th>
+                                    <th class="pb-2">Total</th>
+                                    <th class="pb-2">Date</th>
+                                    <th class="pb-2">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sales-table">
+                                <!-- Will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports Page -->
+            <div id="reports-page" class="page">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">Reports</h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <h3 class="font-medium text-gray-800 mb-4">Inventory Report</h3>
+                        <div class="chart-container">
+                            <canvas id="inventoryReportChart"></canvas>
+                        </div>
+                        <div class="mt-4 flex justify-end">
+                            <button id="export-inventory-report" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
+                                <i class="fas fa-download mr-2"></i>Export Report
+                            </button>
+                        </div>
+                    </div>
+                    <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <h3 class="font-medium text-gray-800 mb-4">Sales Report</h3>
+                        <div class="chart-container">
+                            <canvas id="salesReportChart"></canvas>
+                        </div>
+                        <div class="mt-4 flex justify-end">
+                            <button id="export-sales-report" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">
+                                <i class="fas fa-download mr-2"></i>Export Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metric-card bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <h3 class="font-medium text-gray-800 mb-4">Transfer Report</h3>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="transferReportChart"></canvas>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <button id="export-transfer-report" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm">
+                            <i class="fas fa-download mr-2"></i>Export Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Inventory Modal -->
+    <div id="add-inventory-modal" class="modal">
+        <div class="modal-content p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium">Add New Inventory</h3>
+                <button id="close-add-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="add-inventory-form">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Product Name</label>
+                    <input type="text" id="product-name" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Brand</label>
+                    <input type="text" id="product-brand" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Quantity</label>
+                    <input type="number" id="product-quantity" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Location</label>
+                    <select id="product-location" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="warehouse">Warehouse</option>
+                        <option value="showroom">Showroom</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancel-add-inventory" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700">Add Inventory</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Transfer Modal -->
+    <div id="transfer-modal" class="modal">
+        <div class="modal-content p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium">Transfer Items</h3>
+                <button id="close-transfer-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="transfer-form">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Product</label>
+                    <select id="transfer-product" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="">Select Product</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Quantity</label>
+                    <input type="number" id="transfer-quantity" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">From</label>
+                    <select id="transfer-from" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="warehouse">Warehouse</option>
+                        <option value="showroom">Showroom</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">To</label>
+                    <select id="transfer-to" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="showroom">Showroom</option>
+                        <option value="warehouse">Warehouse</option>
+                        <option value="customer">Customer (Sale)</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancel-transfer" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700">Transfer Items</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sale Modal -->
+    <div id="sale-modal" class="modal">
+        <div class="modal-content p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium">New Sale</h3>
+                <button id="close-sale-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="sale-form">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Customer Name</label>
+                    <input type="text" id="customer-name" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Products</label>
+                    <div id="sale-products-container">
+                        <div class="product-row">
+                            <select class="sale-product flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                                <option value="">Select Product</option>
+                            </select>
+                            <input type="number" placeholder="Qty" class="sale-quantity w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <button type="button" class="text-red-500 hover:text-red-700 remove-product-btn">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" id="add-product-btn" class="mt-2 text-sm text-blue-600 hover:text-blue-800">
+                        <i class="fas fa-plus mr-1"></i>Add Another Product
+                    </button>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Sale Location</label>
+                    <select id="sale-location" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="showroom">Showroom</option>
+                        <option value="warehouse">Warehouse (Bulk Order)</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancel-sale" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700">Complete Sale</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentUser = {
+            id: null,
+            username: '',
+            role: ''
+        };
+
+        // Initialize the application when DOM is loaded
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Check if user is logged in
+            try {
+                const response = await fetch('/api/dashboard/stats');
+                if (!response.ok) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                // Set user info
+                currentUser.id = sessionStorage.getItem('user_id');
+                currentUser.username = sessionStorage.getItem('username');
+                currentUser.role = sessionStorage.getItem('user_role');
+
+                if (!currentUser.id || !currentUser.username || !currentUser.role) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                document.getElementById('username-display').textContent = currentUser.username;
+                document.getElementById('role-display').textContent =
+                    currentUser.role === 'admin' ? 'Administrator' :
+                    currentUser.role === 'warehouse' ? 'Warehouse Staff' : 'Showroom Staff';
+
+                document.getElementById('dashboard-title').textContent =
+                    currentUser.role === 'admin' ? 'Admin Dashboard' :
+                    currentUser.role === 'warehouse' ? 'Warehouse Dashboard' : 'Showroom Dashboard';
+
+                // Initialize navigation
+                setupNavigation();
+
+                // Initialize dashboard
+                initializeDashboard();
+
+                // Initialize modals
+                setupModals();
+
+                // Load initial data
+                loadData();
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        });
+
+        function setupNavigation() {
+            // Navigation links
+            const navLinks = document.querySelectorAll('.nav-link');
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+
+                    // Remove active class from all links
+                    navLinks.forEach(l => l.classList.remove('active'));
+
+                    // Add active class to clicked link
+                    this.classList.add('active');
+
+                    // Hide all pages
+                    document.querySelectorAll('.page').forEach(page => {
+                        page.classList.remove('active');
+                    });
+
+                    // Show selected page
+                    const pageId = this.dataset.page + '-page';
+                    document.getElementById(pageId).classList.add('active');
+
+                    // Load data for the page if needed
+                    if (this.dataset.page === 'inventory') {
+                        loadInventory();
+                    } else if (this.dataset.page === 'transfers') {
+                        loadTransfers();
+                    } else if (this.dataset.page === 'sales') {
+                        loadSales();
+                    } else if (this.dataset.page === 'reports') {
+                        loadReports();
+                    }
+                });
+            });
+        }
+
+        function initializeDashboard() {
+            // Initialize Charts
+            const inventoryCtx = document.getElementById('inventoryChart').getContext('2d');
+            window.inventoryChart = new Chart(inventoryCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Received',
+                            data: [],
+                            backgroundColor: '#3b82f6',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Transferred',
+                            data: [],
+                            backgroundColor: '#10b981',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#f3f4f6'
+                            }
+                        }
+                    }
+                }
+            });
+
+            const salesCtx = document.getElementById('salesChart').getContext('2d');
+            window.salesChart = new Chart(salesCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Warehouse Sales',
+                            data: [],
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Showroom Sales',
+                            data: [],
+                            borderColor: '#8b5cf6',
+                            backgroundColor: 'rgba(139, 92, 246, 0.05)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#f3f4f6'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Period selectors
+            document.getElementById('inventory-period').addEventListener('change', function() {
+                updateInventoryChart(parseInt(this.value));
+            });
+
+            document.getElementById('sales-period').addEventListener('change', function() {
+                updateSalesChart(parseInt(this.value));
+            });
+        }
+
+        function setupModals() {
+            // Modal handling
+            const modals = {
+                'add-inventory': document.getElementById('add-inventory-modal'),
+                'transfer': document.getElementById('transfer-modal'),
+                'sale': document.getElementById('sale-modal')
+            };
+
+            // Open modal buttons
+            document.getElementById('add-inventory-btn').addEventListener('click', () => {
+                modals['add-inventory'].style.display = 'flex';
+            });
+
+            document.getElementById('add-inventory-btn-inv').addEventListener('click', () => {
+                modals['add-inventory'].style.display = 'flex';
+            });
+
+            document.getElementById('transfer-btn').addEventListener('click', async () => {
+                await loadProductsForTransfer();
+                modals['transfer'].style.display = 'flex';
+            });
+
+            document.getElementById('transfer-btn-trans').addEventListener('click', async () => {
+                await loadProductsForTransfer();
+                modals['transfer'].style.display = 'flex';
+            });
+
+            document.getElementById('new-sale-btn').addEventListener('click', async () => {
+                await loadProductsForSale();
+                modals['sale'].style.display = 'flex';
+            });
+
+            document.getElementById('new-sale-btn-sales').addEventListener('click', async () => {
+                await loadProductsForSale();
+                modals['sale'].style.display = 'flex';
+            });
+
+            // Close modal buttons
+            document.getElementById('close-add-modal').addEventListener('click', () => {
+                modals['add-inventory'].style.display = 'none';
+            });
+
+            document.getElementById('close-transfer-modal').addEventListener('click', () => {
+                modals['transfer'].style.display = 'none';
+            });
+
+            document.getElementById('close-sale-modal').addEventListener('click', () => {
+                modals['sale'].style.display = 'none';
+            });
+
+            document.getElementById('cancel-add-inventory').addEventListener('click', () => {
+                modals['add-inventory'].style.display = 'none';
+            });
+
+            document.getElementById('cancel-transfer').addEventListener('click', () => {
+                modals['transfer'].style.display = 'none';
+            });
+
+            document.getElementById('cancel-sale').addEventListener('click', () => {
+                modals['sale'].style.display = 'none';
+            });
+
+            // Close modals when clicking outside
+            Object.values(modals).forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            });
+
+            // Add product row in sale form
+            document.getElementById('add-product-btn').addEventListener('click', async () => {
+                const container = document.getElementById('sale-products-container');
+                const newRow = document.createElement('div');
+                newRow.className = 'product-row';
+                newRow.innerHTML = `
+                    <select class="sale-product flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <option value="">Select Product</option>
+                    </select>
+                    <input type="number" placeholder="Qty" class="sale-quantity w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    <button type="button" class="text-red-500 hover:text-red-700 remove-product-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                container.appendChild(newRow);
+
+                // Populate products in the new select
+                await populateProductSelect(newRow.querySelector('.sale-product'));
+
+                // Add event listener to the new remove button
+                newRow.querySelector('.remove-product-btn').addEventListener('click', function() {
+                    container.removeChild(newRow);
+                });
+            });
+
+            // Form submissions
+            document.getElementById('add-inventory-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const productData = {
+                    name: document.getElementById('product-name').value,
+                    brand: document.getElementById('product-brand').value,
+                    location: document.getElementById('product-location').value,
+                    quantity: parseInt(document.getElementById('product-quantity').value)
+                };
+
+                try {
+                    const response = await fetch('/api/inventory', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(productData)
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to add inventory');
+                    }
+
+                    alert('Inventory added successfully!');
+                    modals['add-inventory'].style.display = 'none';
+                    this.reset();
+                    loadData();
+                    loadInventory();
+                } catch (error) {
+                    alert(error.message);
+                }
+            });
+
+            document.getElementById('transfer-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const transferData = {
+                    product_id: parseInt(document.getElementById('transfer-product').value),
+                    from_location: document.getElementById('transfer-from').value,
+                    to_location: document.getElementById('transfer-to').value,
+                    quantity: parseInt(document.getElementById('transfer-quantity').value)
+                };
+
+                try {
+                    const response = await fetch('/api/transfers', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(transferData)
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to initiate transfer');
+                    }
+
+                    alert('Transfer initiated successfully!');
+                    modals['transfer'].style.display = 'none';
+                    this.reset();
+                    loadData();
+                    loadTransfers();
+                } catch (error) {
+                    alert(error.message);
+                }
+            });
+
+            document.getElementById('sale-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const products = [];
+                const productElements = document.querySelectorAll('.sale-product');
+                const quantityElements = document.querySelectorAll('.sale-quantity');
+
+                productElements.forEach((product, index) => {
+                    if (product.value && quantityElements[index].value) {
+                        products.push({
+                            product_id: parseInt(product.value),
+                            quantity: parseInt(quantityElements[index].value)
+                        });
+                    }
+                });
+
+                if (products.length === 0) {
+                    alert('Please add at least one product to the sale');
+                    return;
+                }
+
+                const saleData = {
+                    customer_name: document.getElementById('customer-name').value,
+                    location: document.getElementById('sale-location').value,
+                    items: products
+                };
+
+                try {
+                    const response = await fetch('/api/sales', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(saleData)
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to complete sale');
+                    }
+
+                    alert(`Sale completed successfully! Total: ₹${data.total_amount}`);
+                    modals['sale'].style.display = 'none';
+                    this.reset();
+
+                    // Reset products container to single row
+                    const container = document.getElementById('sale-products-container');
+                    container.innerHTML = `
+                        <div class="product-row">
+                            <select class="sale-product flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                                <option value="">Select Product</option>
+                            </select>
+                            <input type="number" placeholder="Qty" class="sale-quantity w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <button type="button" class="text-red-500 hover:text-red-700 remove-product-btn">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    `;
+
+                    await loadProductsForSale();
+                    loadData();
+                    loadSales();
+                } catch (error) {
+                    alert(error.message);
+                }
+            });
+
+            // Logout functionality
+            document.getElementById('logout-btn').addEventListener('click', async function() {
+                try {
+                    await fetch('/api/logout', {
+                        method: 'POST'
+                    });
+                    window.location.href = '/login';
+                } catch (error) {
+                    console.error('Logout failed:', error);
+                }
+            });
+        }
+
+        async function loadData() {
+            try {
+                // Load dashboard stats
+                const statsResponse = await fetch('/api/dashboard/stats');
+                if (!statsResponse.ok) throw new Error('Failed to load dashboard stats');
+
+                const stats = await statsResponse.json();
+
+                document.getElementById('total-inventory').textContent = stats.total_inventory;
+                document.getElementById('warehouse-stock').textContent = stats.warehouse_stock;
+                document.getElementById('showroom-stock').textContent = stats.showroom_stock;
+                document.getElementById('pending-transfers').textContent = stats.pending_transfers;
+
+                // Update recent activity
+                const activityTable = document.getElementById('activity-table');
+                activityTable.innerHTML = '';
+
+                stats.recent_activity.forEach(activity => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-t border-gray-100';
+                    row.innerHTML = `
+                        <td class="py-3 text-sm">${new Date(activity.created_at).toLocaleTimeString()}</td>
+                        <td class="py-3 text-sm font-medium">Transfer</td>
+                        <td class="py-3 text-sm">${activity.product_name}</td>
+                        <td class="py-3 text-sm">${activity.quantity} units</td>
+                        <td class="py-3 text-sm">${activity.from_location} → ${activity.to_location}</td>
+                        <td class="py-3">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                activity.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }">${activity.status}</span>
+                        </td>
+                    `;
+                    activityTable.appendChild(row);
+                });
+
+                // Update charts
+                updateInventoryChart(7);
+                updateSalesChart(7);
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        async function loadInventory() {
+            try {
+                const location = document.getElementById('inventory-filter').value;
+                const search = document.getElementById('inventory-search').value;
+
+                const response = await fetch(`/api/inventory?location=${location}&search=${search}`);
+                if (!response.ok) throw new Error('Failed to load inventory');
+
+                const data = await response.json();
+                const inventoryTable = document.getElementById('inventory-table');
+                inventoryTable.innerHTML = '';
+
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-t border-gray-100';
+                    row.innerHTML = `
+                        <td class="py-3 text-sm">${item.id}</td>
+                        <td class="py-3 text-sm">${item.name}</td>
+                        <td class="py-3 text-sm">${item.brand}</td>
+                        <td class="py-3 text-sm">${item.location}</td>
+                        <td class="py-3 text-sm">${item.quantity}</td>
+                        <td class="py-3 text-sm">${new Date(item.last_updated).toLocaleDateString()}</td>
+                        <td class="py-3 text-sm">
+                            <button class="text-red-600 hover:text-red-800 delete-inventory" data-id="${item.id}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    inventoryTable.appendChild(row);
+                });
+
+                // Add event listeners to delete buttons
+                document.querySelectorAll('.delete-inventory').forEach(button => {
+                    button.addEventListener('click', function() {
+                        const inventoryId = this.dataset.id;
+                        deleteInventoryItem(inventoryId);
+                    });
+                });
+
+                // Add event listeners to filter and search
+                document.getElementById('inventory-filter').addEventListener('change', loadInventory);
+                document.getElementById('inventory-search').addEventListener('input', loadInventory);
+            } catch (error) {
+                console.error('Error loading inventory:', error);
+            }
+        }
+
+        async function loadTransfers() {
+            try {
+                const status = document.getElementById('transfer-filter').value;
+
+                const response = await fetch(`/api/transfers?status=${status}`);
+                if (!response.ok) throw new Error('Failed to load transfers');
+
+                const data = await response.json();
+                const transfersTable = document.getElementById('transfers-table');
+                transfersTable.innerHTML = '';
+
+                data.forEach(transfer => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-t border-gray-100';
+                    row.innerHTML = `
+                        <td class="py-3 text-sm">${transfer.id}</td>
+                        <td class="py-3 text-sm">${transfer.product_name}</td>
+                        <td class="py-3 text-sm">${transfer.from_location}</td>
+                        <td class="py-3 text-sm">${transfer.to_location}</td>
+                        <td class="py-3 text-sm">${transfer.quantity}</td>
+                        <td class="py-3">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                transfer.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }">${transfer.status}</span>
+                        </td>
+                        <td class="py-3 text-sm">${transfer.initiated_by_name}</td>
+                        <td class="py-3 text-sm">${new Date(transfer.created_at).toLocaleDateString()}</td>
+                        <td class="py-3 text-sm">
+                            ${transfer.status === 'pending' ? `
+                            <button class="text-green-600 hover:text-green-800 complete-transfer" data-id="${transfer.id}">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            ` : ''}
+                            <button class="text-blue-600 hover:text-blue-800 ml-2">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                    `;
+                    transfersTable.appendChild(row);
+                });
+
+                // Add event listeners to complete transfer buttons
+                document.querySelectorAll('.complete-transfer').forEach(button => {
+                    button.addEventListener('click', function() {
+                        const transferId = this.dataset.id;
+                        completeTransfer(transferId);
+                    });
+                });
+
+                // Add event listener to filter
+                document.getElementById('transfer-filter').addEventListener('change', loadTransfers);
+            } catch (error) {
+                console.error('Error loading transfers:', error);
+            }
+        }
+
+        async function loadSales() {
+            try {
+                const location = document.getElementById('sales-filter').value;
+                const search = document.getElementById('sales-search').value;
+
+                const response = await fetch(`/api/sales?location=${location}&search=${search}`);
+                if (!response.ok) throw new Error('Failed to load sales');
+
+                const data = await response.json();
+                const salesTable = document.getElementById('sales-table');
+                salesTable.innerHTML = '';
+
+                data.forEach(sale => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-t border-gray-100';
+                    row.innerHTML = `
+                        <td class="py-3 text-sm">${sale.id}</td>
+                        <td class="py-3 text-sm">${sale.customer_name || 'N/A'}</td>
+                        <td class="py-3 text-sm">${sale.location}</td>
+                        <td class="py-3 text-sm">${sale.items_count} items</td>
+                        <td class="py-3 text-sm">₹${sale.total_amount}</td>
+                        <td class="py-3 text-sm">${new Date(sale.created_at).toLocaleDateString()}</td>
+                        <td class="py-3 text-sm">
+                            <button class="text-blue-600 hover:text-blue-800">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                    `;
+                    salesTable.appendChild(row);
+                });
+
+                // Add event listeners to filter and search
+                document.getElementById('sales-filter').addEventListener('change', loadSales);
+                document.getElementById('sales-search').addEventListener('input', loadSales);
+            } catch (error) {
+                console.error('Error loading sales:', error);
+            }
+        }
+
+        async function loadReports() {
+            try {
+                // Initialize report charts
+                const inventoryReportCtx = document.getElementById('inventoryReportChart').getContext('2d');
+                window.inventoryReportChart = new Chart(inventoryReportCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Warehouse', 'Showroom'],
+                        datasets: [{
+                            data: [0, 0],
+                            backgroundColor: ['#3b82f6', '#8b5cf6'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                            }
+                        }
+                    }
+                });
+
+                const salesReportCtx = document.getElementById('salesReportChart').getContext('2d');
+                window.salesReportChart = new Chart(salesReportCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Warehouse', 'Showroom'],
+                        datasets: [{
+                            label: 'Sales',
+                            data: [0, 0],
+                            backgroundColor: ['#3b82f6', '#8b5cf6'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                const transferReportCtx = document.getElementById('transferReportChart').getContext('2d');
+                window.transferReportChart = new Chart(transferReportCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'Warehouse to Showroom',
+                                data: [],
+                                borderColor: '#3b82f6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                                fill: true,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Showroom to Warehouse',
+                                data: [],
+                                borderColor: '#8b5cf6',
+                                backgroundColor: 'rgba(139, 92, 246, 0.05)',
+                                fill: true,
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                // Load data for reports
+                const inventoryResponse = await fetch('/api/inventory?location=all');
+                if (!inventoryResponse.ok) throw new Error('Failed to load inventory for reports');
+                const inventoryData = await inventoryResponse.json();
+
+                const warehouseStock = inventoryData.filter(item => item.location === 'warehouse').reduce((sum, item) => sum + item.quantity, 0);
+                const showroomStock = inventoryData.filter(item => item.location === 'showroom').reduce((sum, item) => sum + item.quantity, 0);
+
+                window.inventoryReportChart.data.datasets[0].data = [warehouseStock, showroomStock];
+                window.inventoryReportChart.update();
+
+                const salesResponse = await fetch('/api/sales');
+                if (!salesResponse.ok) throw new Error('Failed to load sales for reports');
+                const salesData = await salesResponse.json();
+
+                const warehouseSales = salesData.filter(sale => sale.location === 'warehouse').reduce((sum, sale) => sum + sale.total_amount, 0);
+                const showroomSales = salesData.filter(sale => sale.location === 'showroom').reduce((sum, sale) => sum + sale.total_amount, 0);
+
+                window.salesReportChart.data.datasets[0].data = [warehouseSales, showroomSales];
+                window.salesReportChart.update();
+
+                const transfersResponse = await fetch('/api/transfers?status=completed');
+                if (!transfersResponse.ok) throw new Error('Failed to load transfers for reports');
+                const transfersData = await transfersResponse.json();
+
+                // Group transfers by month
+                const monthlyTransfers = {};
+
+                transfersData.forEach(transfer => {
+                    const date = new Date(transfer.completed_at);
+                    const monthYear = `${date.getMonth()+1}/${date.getFullYear()}`;
+
+                    if (!monthlyTransfers[monthYear]) {
+                        monthlyTransfers[monthYear] = {
+                            warehouseToShowroom: 0,
+                            showroomToWarehouse: 0
+                        };
+                    }
+
+                    if (transfer.from_location === 'warehouse' && transfer.to_location === 'showroom') {
+                        monthlyTransfers[monthYear].warehouseToShowroom += transfer.quantity;
+                    } else if (transfer.from_location === 'showroom' && transfer.to_location === 'warehouse') {
+                        monthlyTransfers[monthYear].showroomToWarehouse += transfer.quantity;
+                    }
+                });
+
+                // Prepare chart data
+                const labels = Object.keys(monthlyTransfers).sort();
+                const warehouseToShowroomData = labels.map(label => monthlyTransfers[label].warehouseToShowroom);
+                const showroomToWarehouseData = labels.map(label => monthlyTransfers[label].showroomToWarehouse);
+
+                window.transferReportChart.data.labels = labels;
+                window.transferReportChart.data.datasets[0].data = warehouseToShowroomData;
+                window.transferReportChart.data.datasets[1].data = showroomToWarehouseData;
+                window.transferReportChart.update();
+            } catch (error) {
+                console.error('Error loading reports:', error);
+            }
+        }
+
+        async function loadProductsForTransfer() {
+            try {
+                const response = await fetch('/api/inventory?location=all');
+                if (!response.ok) throw new Error('Failed to load products for transfer');
+
+                const data = await response.json();
+                const select = document.getElementById('transfer-product');
+                select.innerHTML = '<option value="">Select Product</option>';
+
+                data.forEach(product => {
+                    const option = document.createElement('option');
+                    option.value = product.product_id;
+                    option.textContent = `${product.name} (${product.brand}) - ${product.location} (${product.quantity} available)`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading products for transfer:', error);
+            }
+        }
+
+        async function loadProductsForSale() {
+            try {
+                const response = await fetch('/api/inventory?location=all');
+                if (!response.ok) throw new Error('Failed to load products for sale');
+
+                const data = await response.json();
+                const selects = document.querySelectorAll('.sale-product');
+
+                selects.forEach(select => {
+                    // Only populate if it's empty (has only the default option)
+                    if (select.options.length <= 1) {
+                        select.innerHTML = '<option value="">Select Product</option>';
+
+                        data.forEach(product => {
+                            const option = document.createElement('option');
+                            option.value = product.product_id;
+                            option.textContent = `${product.name} (${product.brand}) - ${product.location} (${product.quantity} available)`;
+                            select.appendChild(option);
+                        });
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading products for sale:', error);
+            }
+        }
+
+        async function populateProductSelect(selectElement) {
+            try {
+                const response = await fetch('/api/inventory?location=all');
+                if (!response.ok) throw new Error('Failed to load products');
+
+                const data = await response.json();
+                selectElement.innerHTML = '<option value="">Select Product</option>';
+
+                data.forEach(product => {
+                    const option = document.createElement('option');
+                    option.value = product.product_id;
+                    option.textContent = `${product.name} (${product.brand}) - ${product.location} (${product.quantity} available)`;
+                    selectElement.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error populating product select:', error);
+            }
+        }
+
+        async function updateInventoryChart(days) {
+            try {
+                const response = await fetch(`/api/dashboard/charts/inventory?days=${days}`);
+                if (!response.ok) throw new Error('Failed to load inventory chart data');
+
+                const data = await response.json();
+
+                window.inventoryChart.data.labels = data.labels;
+                window.inventoryChart.data.datasets[0].data = data.received;
+                window.inventoryChart.data.datasets[1].data = data.transferred;
+                window.inventoryChart.update();
+            } catch (error) {
+                console.error('Error updating inventory chart:', error);
+            }
+        }
+
+        async function updateSalesChart(days) {
+            try {
+                const response = await fetch(`/api/dashboard/charts/sales?days=${days}`);
+                if (!response.ok) throw new Error('Failed to load sales chart data');
+
+                const data = await response.json();
+
+                window.salesChart.data.labels = data.labels;
+                window.salesChart.data.datasets[0].data = data.warehouse_sales;
+                window.salesChart.data.datasets[1].data = data.showroom_sales;
+                window.salesChart.update();
+            } catch (error) {
+                console.error('Error updating sales chart:', error);
+            }
+        }
+
+        async function completeTransfer(transferId) {
+            if (!confirm('Are you sure you want to complete this transfer?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/transfers/${transferId}/complete`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to complete transfer');
+                }
+
+                alert('Transfer completed successfully!');
+                loadTransfers();
+                loadData();
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function deleteInventoryItem(inventoryId) {
+            if (!confirm('Are you sure you want to delete this inventory item?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/inventory/${inventoryId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to delete inventory item');
+                }
+
+                alert('Inventory item deleted successfully!');
+                loadInventory();
+                loadData();
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+    </script>
+</body>
+</html>
